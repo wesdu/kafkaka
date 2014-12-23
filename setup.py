@@ -25,7 +25,7 @@ WARNNING: Under development, Now only support simple send method. Not support Py
     import time
 
     if __name__ == "__main__":
-        c = KafkaClient("t-storm1:9092")
+        c = KafkaClient("t-storm1:9092", topic_names=['im-msg'])
         print ''
         for i in xrange(50):
             c.send_message('im-msg', u'你好', str(time.time()), i)
