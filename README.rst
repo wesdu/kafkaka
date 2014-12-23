@@ -1,29 +1,43 @@
-## kafkaka
-### INTRODUCE
+kafkaka
+===============
+
 a Kafka client which using easy described protocol tool - bstruct, also be able to be used with Gevent.
-  
 WARNNING: Under development, Now only support simple send method. Not support Python3.
 
-### USAGE
+USAGE
+-------------------------
+
+Install using pypi::
+
     pip install kafkaka
 
-### EXAMPLE
-#### simple block mode
+Install from source::
+
+    git clone https://github.com/wesdu/kafkaka.git
+    cd kafkaka
+    python setup.py install
+
+EXAMPLE
+-------------------------
+
+simple block mode::
+
     from kafkaka.client import KafkaClient
     import time
-    
+
     if __name__ == "__main__":
         c = KafkaClient("tx-storm1:9092")
         c.send_message('im-msg', 'hi', str(time.time()))
         c.send_message('im-msg', u'你好', str(time.time()))
         print 'this will block'
-        
-#### using with Gevent
+
+using with Gevent::
+
     from kafkaka.gevent_patch import KafkaClient
     from gevent import spawn
     from gevent import sleep
     import time
-    
+
     if __name__ == "__main__":
         c = KafkaClient("t-storm1:9092", topic_names=['im-msg'])
         print ''

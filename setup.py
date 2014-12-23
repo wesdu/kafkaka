@@ -5,8 +5,9 @@ except ImportError:
     from distutils.core import setup
 
 setup(name='kafkaka',
-      version='0.2.1',
+      version='0.2.4',
       description='Kafka Client with smarter protocol described and adapter for Gevent',
+      long_description=open('README.rst').read(),
       author='Du Wei',
       author_email='pandorid@gmail.com',
       url='https://github.com/wesdu/kafkaka',
