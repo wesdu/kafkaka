@@ -5,7 +5,7 @@ except ImportError:
     from distutils.core import setup
 
 setup(name='kafkaka',
-      version='0.2',
+      version='0.2.1',
       description='Kafka Client with smarter protocol described and adapter for Gevent',
       author='Du Wei',
       author_email='pandorid@gmail.com',
