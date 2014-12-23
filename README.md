@@ -4,6 +4,9 @@ a Kafka client which using easy described protocol tool - bstruct, also be able 
   
 WARNNING: Under development, Now only support simple send method. Not support Python3.
 
+### USAGE
+    pip install kafkaka
+
 ### EXAMPLE
 #### simple block mode
     from kafkaka.client import KafkaClient
