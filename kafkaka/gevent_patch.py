@@ -28,13 +28,8 @@ class ConnectionPool(object):
     def __init__(self, connection_class=Connection, pool_size=DEFAULT_POOL_SIZE, **connection_kwargs):
         self.connection_class = connection_class
         self.connection_kwargs = connection_kwargs
-        # below should be reset
-        self._created_connections = 0
-        self._available_connections = []
-        self._in_use_connections = set()
-        self.q = Queue(maxsize=pool_size)
-        for i in xrange(pool_size):
-            self.q.put_nowait(i)
+        self.pool_size = pool_size  # the number of max parallel connections
+        self.reset()
 
     def __repr__(self):
         return "%s<%s%s>" % (
@@ -50,13 +45,20 @@ class ConnectionPool(object):
         self._created_connections = 0
         self._available_connections = []
         self._in_use_connections = set()
+        if self.pool_size is not None:
+            self.q = Queue(maxsize=self.pool_size)
+            for i in xrange(self.pool_size):
+                self.q.put_nowait(i)
+        else:
+            self.q = None
 
     def get_connection(self):
         """
         Get a connection from the pool
         :return: Connection object
         """
-        self.q.get()
+        if self.q:
+            self.q.get()
         try:
             c = self._available_connections.pop()
         except IndexError:
@@ -73,7 +75,8 @@ class ConnectionPool(object):
         :param connection:
         :return:
         """
-        self.q.put_nowait(1)
+        if self.q:
+            self.q.put_nowait(1)
         if connection in self._in_use_connections:
             self._in_use_connections.remove(connection)
             self._available_connections.append(connection)
@@ -94,6 +97,7 @@ class KafkaClient(KafkaClient):
 
     def __init__(self, *args, **kwargs):
         self._pools = {}
+        self._pool_size = kwargs.pop('pool_size', DEFAULT_POOL_SIZE)
         super(KafkaClient, self).__init__(*args, **kwargs)
 
     def _get_conn(self, host, port):
@@ -105,7 +109,7 @@ class KafkaClient(KafkaClient):
         """
         key = (host, port)
         if key not in self._pools:
-            self._pools[key] = ConnectionPool(host=host, port=port)
+            self._pools[key] = ConnectionPool(host=host, port=port, pool_size=self._pool_size)
         return self._pools[key].get_connection()
 
     def _release(self, host, port, conn):
