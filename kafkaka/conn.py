@@ -19,10 +19,13 @@ class Connection(object):
         self._timeout = timeout
         self._log_tail = " @ %s:%d" % (self._host, self._port)
         try:
-            self._sock = socket.create_connection((self._host, self._port), self._timeout)
+            self.connect()
         except socket.error, socket.timeout:
             self.close()
             self._log_and_raise("Unable to connect to kafka broker")
+
+    def connect(self):
+        self._sock = socket.create_connection((self._host, self._port), self._timeout)
 
     def __repr__(self):
         return type(self).__name__ + "<host={0},port={1}>".format(self._host, self._port)

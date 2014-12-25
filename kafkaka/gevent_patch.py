@@ -7,6 +7,7 @@ from kafkaka.conn import Connection
 from kafkaka.define import DEFAULT_POOL_SIZE
 from gevent import spawn
 from gevent.queue import Queue
+import socket
 monkey.patch_socket()
 log = logging.getLogger("kafka")
 
@@ -22,6 +23,10 @@ class Connection(Connection):
 
     def __exit__(self, exc_type, exc_val, exc_tb):
         self._pool.release(self)
+
+    def close(self):
+        super(Connection, self).close()
+        self._pool = None
 
 
 class ConnectionPool(object):
@@ -112,19 +117,9 @@ class KafkaClient(KafkaClient):
             self._pools[key] = ConnectionPool(host=host, port=port, pool_size=self._pool_size)
         return self._pools[key].get_connection()
 
-    def _release(self, host, port, conn):
-        key = (host, port)
-        self._pools[key].release(conn)
-
-    def boot_metadata(self, *args, **kwargs):
-        super(KafkaClient, self).boot_metadata(*args, **kwargs)  # should be block
-
     def send_message(self, *args, **kwargs):
         return spawn(super(KafkaClient, self).send_message, *args, **kwargs)
 
 
 if __name__ == "__main__":
-    c = Connection('t-storm1')
-    print repr(c)
-    pool = ConnectionPool(connection_class=Connection, host="t-storm1")
-    print repr(pool)
+    pass

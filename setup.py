@@ -5,8 +5,8 @@ except ImportError:
     from distutils.core import setup
 
 setup(name='kafkaka',
-      version='0.2.4',
-      description='Kafka Client with smarter protocol described and adapter for Gevent',
+      version='0.2.5',
+      description='Kafka Client with smarter protocol described, support for Gevent and tornado',
       long_description=open('README.rst').read(),
       author='Du Wei',
       author_email='pandorid@gmail.com',
@@ -24,8 +24,8 @@ setup(name='kafkaka',
         "Programming Language :: Python :: 2.7",
         "Topic :: Software Development :: Libraries :: Python Modules",
       ],
-      keywords='Kafka,bstruct,gevent,client',
+      keywords='Kafka,gevent,tornado,client',
       packages=['kafkaka'],
       package_dir={'kafkaka':'kafkaka'},
-      package_data={'kafkaka':['*.*']}, requires=['gevent']
+      package_data={'kafkaka':['*.*']}, requires=['gevent', 'tornado']
 )

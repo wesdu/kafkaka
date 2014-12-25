@@ -55,8 +55,26 @@ class KafkaClient(object):
         self.brokers = {}
         self.topic_and_partition_to_brokers = {}
         self.topic_to_partitions = {}
-        self.boot_metadata(topic_names)
         self.partitions_cycle = {}
+        self._callbacks = []
+        self._ready = False
+        self.boot_metadata(topic_names, self._do_callbacks)
+
+    def _add_callback(self, func):
+        self._callbacks.append(func)
+
+    def _do_callbacks(self):
+        self._ready = True
+        while 1:
+            try:
+                func = self._callbacks.pop()
+                func()
+            except IndexError:
+                # all done
+                break
+            except:
+                # other error
+                continue
 
     def _get_next_correlation_id(self):
         """
@@ -121,12 +139,7 @@ class KafkaClient(object):
                     continue
                 self.topic_and_partition_to_brokers[(topic.topic_name, partition.partition)] = partition.leader
 
-    def boot_metadata(self, expected_topics):
-        """
-        boot metadata from kafka server
-        :param expected_topics: The topics to produce metadata for. If empty the request will yield metadata for all topics.
-        :return:
-        """
+    def _pack_boot_metadata(self, expected_topics):
         correlation_id = self._get_next_correlation_id()
         _topics = [dict(topic_name=t) for t in expected_topics]
         request_bytes = MetaStruct(
@@ -134,16 +147,30 @@ class KafkaClient(object):
             topic_length=len(expected_topics),
             topics=_topics,
         ).pack2bin()
+        return correlation_id, _topics, request_bytes
+
+    def _unpack_boot_metadata(self, resp_bytes, expected_topics, callback=None):
+        resp = MetaResponseStruct()
+        resp.unpack(resp_bytes)
+        resp = resp.dump2nametuple()
+        self._load_metadata(resp, expected_topics)
+        if callback:
+            callback()
+
+    def boot_metadata(self, expected_topics, callback=None):
+        """
+        boot metadata from kafka server
+        :param expected_topics: The topics to produce metadata for. If empty the request will yield metadata for all topics.
+        :return:
+        """
+        correlation_id, _topics, request_bytes = self._pack_boot_metadata(expected_topics)
         for (host, port) in self.hosts*3:  # trick for auto-create topics
             try:
                 with self._get_conn(host, port) as conn:
                     conn.send(request_bytes, correlation_id)
                     resp_bytes = conn.recv(correlation_id)
-                resp = MetaResponseStruct()
-                resp.unpack(resp_bytes)
-                resp = resp.dump2nametuple()
-                self._load_metadata(resp, expected_topics)
-                return resp  # break the loop
+                self._unpack_boot_metadata(resp_bytes, expected_topics, callback)
+                return  # break the loop
             except ConnectionError as e:
                 log.warning("Could not send request [%r] to server %s:%i, "
                             "trying next server: %s" % (correlation_id, host, port, e))
@@ -155,7 +182,7 @@ class KafkaClient(object):
                 continue
         raise KafkaError("All servers failed to process request")
 
-    def send_message(self, topic_name, *msg):
+    def _pack_send_message(self, topic_name, *msg):
         partition_id = self._get_next_partition(topic_name)
         correlation_id = self._get_next_correlation_id()
         request_bytes = ProduceStruct(
@@ -175,6 +202,18 @@ class KafkaClient(object):
         node_id = self.topic_and_partition_to_brokers[(topic_name, partition_id)]
         broker = self.brokers[node_id]
         host, port = broker.host, broker.port
+        return host, port, request_bytes, correlation_id
+
+    def _unpack_send_message(self, resp_bytes):
+        resp = ProduceResponseStruct()
+        resp.unpack(resp_bytes)
+        d = resp.dump2nametuple()
+        for topic in d.topics:
+            for partition in topic.partitions:
+                check_and_raise_error(partition)
+
+    def send_message(self, topic_name, *msg):
+        host, port, request_bytes, correlation_id = self._pack_send_message(topic_name, *msg)
         for i in xrange(self._retry_times):
             with self._get_conn(host, port) as conn:
                 try:
@@ -183,15 +222,10 @@ class KafkaClient(object):
                     log.warning("Could not send request [%r] to server %s:%i, try again, %s" % (correlation_id, host, port, e))
                     if i == self._retry_times - 1:
                         log.error("Could not send request [%r] to server %s:%i, %s" % (correlation_id, host, port, e))
-                    continue  # try more times
+                    continue  # try more
                 try:
                     resp_bytes = conn.recv(correlation_id)
-                    resp = ProduceResponseStruct()
-                    resp.unpack(resp_bytes)
-                    d = resp.dump2nametuple()
-                    for topic in d.topics:
-                        for partition in topic.partitions:
-                            check_and_raise_error(partition)
+                    self._unpack_send_message(resp_bytes)
                 except ConnectionError as e:
                     log.error('Could not get response [%r] from server %s:%i, %s' % (correlation_id, host, port, e))
                 except Exception as e:
