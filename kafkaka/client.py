@@ -194,7 +194,7 @@ class KafkaClient(object):
                     topic_payloads=[
                         dict(
                             partition=partition_id,
-                            message_set=[dict(message=dict(message=dict(v))) for v in msg]
+                            message_set=[dict(message=dict(message=dict(value=v))) for v in msg]
                         ),
                     ],
                 ),
