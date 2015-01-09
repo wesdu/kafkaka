@@ -50,6 +50,7 @@ class KafkaClient(object):
         self.client_id = client_id
         self.timeout = timeout
         self.hosts = initial_hosts(hosts)
+
         self._retry_times = retry_times
         self.conns = {}
         self.brokers = {}
@@ -193,7 +194,7 @@ class KafkaClient(object):
                     topic_payloads=[
                         dict(
                             partition=partition_id,
-                            message_set=[dict(message=dict(message=dict(value=unicode(v).encode('utf8')))) for v in msg]
+                            message_set=[dict(message=dict(message=dict(v))) for v in msg]
                         ),
                     ],
                 ),
