@@ -1,7 +1,7 @@
 # coding: utf8
 import struct
-import copy
 from collections import namedtuple
+from functools import partial
 from kafkaka.util import crc32
 """
 Format	C Type	            Python type	          Standard size	Notes
@@ -46,13 +46,13 @@ class Link():
         self.key = key
 
     def get_value(self, *args, **kwargs):
-        return getattr(self.host, self.key).get_value(*args, **kwargs)
+        return self.host.get_field(self.key).get_value(*args, **kwargs)
 
     def set(self, *args, **kwargs):
-        getattr(self.host, self.key).set(*args, **kwargs)
+        self.host.get_field(self.key).set(*args, **kwargs)
 
     def set_source(self, *args, **kwargs):
-        getattr(self.host, self.key).set_source(*args, **kwargs)
+        self.host.get_field(self.key).set_source(*args, **kwargs)
 
 
 
@@ -62,6 +62,8 @@ class Field(object):
 
     def __init__(self, *args, **kwargs):
         CounterSeed.increase()
+        self.args = args
+        self.kwargs = kwargs
         self._value = None
         self._counter = CounterSeed.get()
         self._default = None
@@ -73,6 +75,9 @@ class Field(object):
         for k in ('repeat', 'length', 'source'):
             if k in kwargs:
                 setattr(self, '_'+k, kwargs.get(k))
+
+    def to_static(self):
+        return self.__class__, self.args, self.kwargs
 
     def set(self, value):
         if self._repeat and type(value) in (tuple, dict):
@@ -179,8 +184,10 @@ class StructMetaClass(type):
         for _name, _value in dct.items():
             if isinstance(_value, Field):
                 magic_dct['_fields_order'].append((_name, _value.get_counter()))
+                dct[_name] = _value.to_static()
             elif isinstance(_value, Struct):
                 magic_dct['_fields_order'].append((_name, _value.get_counter()))
+                dct[_name] = _value.to_static()
 
         magic_dct['_fields_order'] = [k for k, v in sorted(magic_dct['_fields_order'], key=lambda item : item[1])]
         dct = dict(magic_dct.items()+dct.items())
@@ -195,21 +202,25 @@ class Struct(object):
 
     def __init__(self, *args, **kwargs):
         CounterSeed.increase()
+        self.args = args
+        self.kwargs = kwargs
         self._counter = CounterSeed.get()
         self._fmt = ""
         self._values = []
         self._repeat = None
-        _repeat = kwargs.pop('repeat', None)  # so it will not effect _set_fields
-        if _repeat is not None:
-            self._repeat = _repeat
+        if 'repeat' in kwargs:
+            self._repeat = kwargs['repeat']
         self._reset()
         self._set_fields(*args, **kwargs)
+
+    def to_static(self):
+        return self.__class__, self.args, self.kwargs
 
     def dump2nametuple(self):
         T = namedtuple(self.__class__.__name__, ' '.join(self._fields_order))
         tuples = []
         for field_name in self._fields_order:
-            field = getattr(self, field_name)
+            field = self.get_field(field_name)
             if isinstance(field, Field):
                 tuples.append(field.get_value())
             elif isinstance(field, Struct):
@@ -224,21 +235,31 @@ class Struct(object):
                 tuples.append(temp_tuples)
         return T(*tuples)
 
+    def create_field(self, k):
+        f_class, args, kwargs = getattr(self, k)
+        v = f_class(*args, **kwargs)
+        return v
+
+    def set_field(self, k, v):
+        setattr(self, '_inner_'+k, v)
+
+    def get_field(self, k):
+        return getattr(self, '_inner_'+k)
+
     def _reset(self):
         """
         link field to field from two ways
         do some magic
         """
         for k in self._fields_order:
-            origin = getattr(self, k)
-            v = copy.deepcopy(origin)
-            setattr(self, k, v)
+            v = self.create_field(k)
+            self.set_field(k, v)
         for k in self._fields_order:
-            v = getattr(self, k)
+            v = self.get_field(k)
             for tag in ('_repeat', '_length', "_source"):
                 if getattr(v, tag, None) is not None:
                     relative_field_name = getattr(v, tag)
-                    relative = getattr(self, relative_field_name)
+                    relative = self.get_field(relative_field_name)
                     setattr(v, tag, Link(self, relative_field_name))  # relink to the true object
                     setattr(relative, '_reflect'+tag, Link(self, k))  # reverse link
 
@@ -254,13 +275,13 @@ class Struct(object):
                 field_set = []
                 if type(arg) in (tuple, list):
                     for d in arg:
-                        duplicate_field = copy.deepcopy(field)
+                        duplicate_field = self.create_field(field_name)
                         if type(d) in (tuple, list):
                             duplicate_field._set_fields(*d)
                         elif type(d) is dict:
                             duplicate_field._set_fields(**d)
                         field_set.append(duplicate_field)
-                    setattr(self, field_name, field_set)
+                    self.set_field(field_name, field_set)
                     if getattr(field, '_repeat', None) != None:
                         field._repeat.set(len(field_set))
                 else:
@@ -275,7 +296,7 @@ class Struct(object):
             t.set(len(field.get_value()))
         if getattr(field, '_reflect_source', None) is not None:
             t = field._reflect_source
-            field = getattr(self, field_name)  # relocate
+            field = self.get_field(field_name)  # relocate
             if isinstance(field, Field):
                 t.set_source(field.get_value())
             elif isinstance(field, Struct):
@@ -289,23 +310,23 @@ class Struct(object):
                         msgs.append(sub_field.pack2bin())
                 t.set_source(b''.join(msgs))
 
-
     def _set_fields(self, *args, **kwargs):
         if args:
             for i, arg in enumerate(args):
                 field_name = self._fields_order[i]
-                field = getattr(self, field_name)
+                field = self.get_field(field_name)
                 self.__set_fields(field, field_name, arg)
         if kwargs:
             for field_name, arg in kwargs.items():
-                field = getattr(self, field_name)
-                self.__set_fields(field, field_name, arg)
+                if field_name in self._fields_order:
+                    field = self.get_field(field_name)
+                    self.__set_fields(field, field_name, arg)
 
     def _prepare_pack2bin(self):
         fmt = []
         values = []
         for k in self._fields_order:
-            field = getattr(self, k)
+            field = self.get_field(k)
             if isinstance(field, Field):
                 fmt.append(field.get_fmt())
                 value = field.get_value()
@@ -347,7 +368,7 @@ class Struct(object):
     def unpack(self, binary, cur=0):
         buf = binary
         for k in self._fields_order:
-            field = getattr(self, k)
+            field = self.get_field(k)
             if isinstance(field, Field):
                 buf, cur = field.unpack(buf, cur)
             elif isinstance(field, Struct):
@@ -355,19 +376,19 @@ class Struct(object):
                     field_set = []
                     source_left = field._reflect_source.get_value() + cur
                     while source_left:
-                        duplicate_field = copy.deepcopy(field)
+                        duplicate_field = self.create_field(k)
                         buf, cur = duplicate_field.unpack(buf, cur)
                         field_set.append(duplicate_field)
                         source_left -= cur
-                    setattr(self, k, field_set)
+                    self.set_field(k, field_set)
                 elif field._repeat:
                     field_set = []
                     n = field._repeat.get_value()
                     for i in xrange(n):
-                        duplicate_field = copy.deepcopy(field)
+                        duplicate_field = self.create_field(k)
                         buf, cur = duplicate_field.unpack(buf, cur)
                         field_set.append(duplicate_field)
-                    setattr(self, k, field_set)
+                    self.set_field(k, field_set)
                 else:
                     buf, cur = field.unpack(buf, cur)
         return buf, cur

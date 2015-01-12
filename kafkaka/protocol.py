@@ -146,7 +146,9 @@ if __name__ == "__main__":
     m1 = MetaStruct(
         head=dict(correlation_id=111)
     )
+    print m1.dump2nametuple()
     print m1.pack2bin()
+    print m1._values
 
     m2 = MetaStruct(
         head=dict(correlation_id=222)
@@ -221,3 +223,30 @@ if __name__ == "__main__":
     out.unpack(produce_msg.pack2bin())
     print out.dump2nametuple()
     assert out.dump2nametuple().payloads[0].topic_name == 'im-msg'
+
+    # test msgpack
+    import msgpack
+    p = msgpack.packb({'msg': 'hi', 'type': 4, 'dna': 470})
+    print [p]
+    print [ProduceStruct(
+        head = dict(correlation_id=1),
+        payloads=[
+            dict(
+                topic_name='im-msg',
+                topic_payloads=[
+                    dict(
+                        partition=0,
+                        message_set=[
+                            dict(
+                                message=dict(
+                                    message=dict(
+                                        value=p
+                                    )
+                                )
+                            ),
+                        ]
+                    ),
+                ],
+            ),
+        ]
+    ).pack2bin()]
