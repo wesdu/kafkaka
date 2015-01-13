@@ -30,7 +30,7 @@ simple block mode::
     if __name__ == "__main__":
         c = KafkaClient("tx-storm1:9092")
         c.send_message('im-msg', 'hi', str(time.time()))
-        c.send_message('im-msg', u'你好', str(time.time()))
+        c.send_message('im-msg', u'你好'.encode('utf8'), str(time.time()))
         print 'this will block'
 
 using with Gevent::
@@ -45,12 +45,12 @@ using with Gevent::
         c = KafkaClient("t-storm1:9092", topic_names=['im-msg'])
         print ''
         for i in xrange(50):
-            c.send_message('im-msg', u'你好', str(time.time()), i)
-            c.send_message('im-msg', 'hi', str(time.time()), i)
+            c.send_message('im-msg', u'你好'.encode('utf8'), str(time.time()), str(i))
+            c.send_message('im-msg', 'hi', str(time.time()), str(i))
         print 'this will not block'
         for i in xrange(50):
-            c.send_message('im-msg', u'你好', str(time.time()), i)
-            c.send_message('im-msg', 'hi', str(time.time()), i)
+            c.send_message('im-msg', u'你好'.encode('utf8'), str(time.time()), str(i))
+            c.send_message('im-msg', 'hi', str(time.time()), str(i))
             sleep(0.1)
         print 'but this will block'
         sleep(30)
@@ -72,12 +72,12 @@ you can set the number of max parallel connections by using pool_size param::
         all = []
         print ''
         for i in xrange(50):
-            all.append(c.send_message('im-msg', u'你好', str(time.time()), i))
-            all.append(c.send_message('im-msg', 'hi', str(time.time()), i))
+            all.append(c.send_message('im-msg', u'你好'.encode('utf8'), str(time.time()), str(i)))
+            all.append(c.send_message('im-msg', 'hi', str(time.time()), str(i)))
         print 'this will not block'
         for i in xrange(50):
-            all.append(c.send_message('im-msg', u'你好', str(time.time()), i))
-            all.append(c.send_message('im-msg', 'hi', str(time.time()), i))
+            all.append(c.send_message('im-msg', u'你好'.encode('utf8'), str(time.time()), str(i)))
+            all.append(c.send_message('im-msg', 'hi', str(time.time()), str(i)))
         joinall(all)
         print 'but this will block'
         print time.time() - start
@@ -95,11 +95,11 @@ using with tornado::
         start = time.time()
         print ''
         for i in xrange(500):
-            c.send_message('im-msg', u'你好', str(time.time()), i)
-            c.send_message('im-msg', 'hi', str(time.time()), i)
+            c.send_message('im-msg', u'你好'.encode('utf8'), str(time.time()), str(i))
+            c.send_message('im-msg', 'hi', str(time.time()), str(i))
         for i in xrange(500):
-            c.send_message('im-msg', u'你好', str(time.time()), i)
-            c.send_message('im-msg', 'hi', str(time.time()), i)
+            c.send_message('im-msg', u'你好'.encode('utf8'), str(time.time()), str(i))
+            c.send_message('im-msg', 'hi', str(time.time()), str(i))
         print time.time() - start
         print 'this will not block'
         tornado.ioloop.IOLoop.instance().start()

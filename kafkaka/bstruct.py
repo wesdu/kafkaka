@@ -1,7 +1,6 @@
 # coding: utf8
 import struct
 from collections import namedtuple
-from functools import partial
 from kafkaka.util import crc32
 """
 Format	C Type	            Python type	          Standard size	Notes
@@ -188,8 +187,8 @@ class StructMetaClass(type):
             elif isinstance(_value, Struct):
                 magic_dct['_fields_order'].append((_name, _value.get_counter()))
                 dct[_name] = _value.to_static()
-
         magic_dct['_fields_order'] = [k for k, v in sorted(magic_dct['_fields_order'], key=lambda item : item[1])]
+        magic_dct['T'] = namedtuple(name, ' '.join(magic_dct['_fields_order']))
         dct = dict(magic_dct.items()+dct.items())
         return super(StructMetaClass, mcs).__new__(mcs, name, bases, dct)
 
@@ -217,7 +216,7 @@ class Struct(object):
         return self.__class__, self.args, self.kwargs
 
     def dump2nametuple(self):
-        T = namedtuple(self.__class__.__name__, ' '.join(self._fields_order))
+        T = self.T
         tuples = []
         for field_name in self._fields_order:
             field = self.get_field(field_name)
