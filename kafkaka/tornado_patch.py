@@ -262,7 +262,7 @@ class KafkaClient(KafkaClient):
         for i in xrange(self._retry_times):
             with self._get_conn(host, port) as conn:
                 try:
-                    yield gen.task(conn.send, request_bytes, correlation_id)
+                    d = yield gen.task(conn.send, request_bytes, correlation_id)
                 except ConnectionError as e:
                     log.warning("Could not send request [%r] to server %s:%i, try again, %s" % (correlation_id, host, port, e))
                     if i == self._retry_times - 1:

@@ -6,7 +6,7 @@ from kafkaka.client import KafkaClient
 from kafkaka.conn import Connection
 from kafkaka.define import DEFAULT_POOL_SIZE
 from gevent import spawn
-from gevent.queue import Queue
+from gevent.queue import Queue, Full
 import socket
 monkey.patch_socket()
 log = logging.getLogger("kafka")
@@ -22,11 +22,17 @@ class Connection(Connection):
         return self
 
     def __exit__(self, exc_type, exc_val, exc_tb):
-        self._pool.release(self)
+        if self.closed():
+            if self._pool.q:
+                self._pool.q.put_nowait(1)
+            if self in self._pool._in_use_connections:
+                self._pool._in_use_connections.remove(self)
+            self._pool = None            
+        else:
+            self._pool.release(self)
 
     def close(self):
         super(Connection, self).close()
-        self._pool = None
 
 
 class ConnectionPool(object):
@@ -81,10 +87,14 @@ class ConnectionPool(object):
         :return:
         """
         if self.q:
-            self.q.put_nowait(1)
-        if connection in self._in_use_connections:
-            self._in_use_connections.remove(connection)
-            self._available_connections.append(connection)
+            try:
+                self.q.put_nowait(1)
+            except Full:
+                pass
+            else:
+                if connection in self._in_use_connections:
+                    self._in_use_connections.remove(connection)
+                    self._available_connections.append(connection)
 
 
     def disconnect(self):

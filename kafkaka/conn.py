@@ -20,7 +20,7 @@ class Connection(object):
         self._log_tail = " @ %s:%d" % (self._host, self._port)
         try:
             self.connect()
-        except socket.error, socket.timeout:
+        except (socket.error, socket.timeout) as e:
             self.close()
             self._log_and_raise("Unable to connect to kafka broker")
 
@@ -49,9 +49,11 @@ class Connection(object):
             _bytes = struct.pack('>i', -1)
         try:
             self._sock.sendall(_bytes)  # simply using sendall
-        except socket.error, socket.timeout:
+        except (socket.error, socket.timeout, AttributeError) as e:
             self.close()
             self._log_and_raise('Unable to send payload to Kafka')
+
+
 
     def _recv(self, size):
         bytes_left = size
@@ -64,9 +66,11 @@ class Connection(object):
             except AssertionError:
                 self.close()
                 self._log_and_raise("Want to receive more, but server close the socket")
-            except socket.error, socket.timeout:
+                break
+            except (socket.error, socket.timeout, AttributeError) as e:
                 self.close()
                 self._log_and_raise("Unable to receive data from Kafka")
+                break
             bytes_left -= len(data)
             log.debug("Read %d/%d bytes from Kafka", size - bytes_left, size)
             responses.append(data)
@@ -95,6 +99,7 @@ class Connection(object):
             self._sock.close()
             self._sock = None
         else:
+            self._closed = True
             log.debug("Socket connection not exists" + self._log_tail)
 
     def closed(self):
@@ -105,5 +110,5 @@ class Connection(object):
 
     def _log_and_raise(self, err_msg):
         err_msg += self._log_tail
-        log.exception(err_msg)
-        raise ConnectionError(err_msg)
+        log.error(err_msg)
+        #raise ConnectionError(err_msg)
