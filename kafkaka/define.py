@@ -18,6 +18,10 @@ class KafkaError(Exception):
     pass
 
 
+class TopicError(Exception):
+    pass
+
+
 class ConnectionError(KafkaError):
     """
     socket connection error
