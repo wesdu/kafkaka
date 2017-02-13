@@ -5,7 +5,7 @@ from gevent import joinall
 import time
 
 if __name__ == "__main__":
-    c = KafkaClient("t-storm1:9092", topic_names=['im-msg'])
+    c = KafkaClient("localhost:9092", topic_names=['im-msg'])
     start = time.time()
     all = []
     print ''

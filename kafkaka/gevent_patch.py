@@ -23,11 +23,8 @@ class Connection(Connection):
 
     def __exit__(self, exc_type, exc_val, exc_tb):
         if self.closed():
-            if self._pool.q:
-                self._pool.q.put_nowait(1)
-            if self in self._pool._in_use_connections:
-                self._pool._in_use_connections.remove(self)
-            self._pool = None            
+            self._pool.remove(self)
+            self._pool = None
         else:
             self._pool.release(self)
 
@@ -40,6 +37,9 @@ class ConnectionPool(object):
         self.connection_class = connection_class
         self.connection_kwargs = connection_kwargs
         self.pool_size = pool_size  # the number of max parallel connections
+        self._created_connections = 0
+        self._available_connections = []
+        self._in_use_connections = set()
         self.reset()
 
     def __repr__(self):
@@ -53,13 +53,14 @@ class ConnectionPool(object):
         return len(self._available_connections) + len(self._in_use_connections)
 
     def reset(self):
+        self.disconnect()
         self._created_connections = 0
         self._available_connections = []
         self._in_use_connections = set()
         if self.pool_size is not None:
             self.q = Queue(maxsize=self.pool_size)
             for i in xrange(self.pool_size):
-                self.q.put_nowait(i)
+                self.q.put_nowait(1)
         else:
             self.q = None
 
@@ -71,14 +72,17 @@ class ConnectionPool(object):
         if self.q:
             self.q.get()
         try:
-            c = self._available_connections.pop()
-        except IndexError:
-            c = self.connection_class(pool=self, **self.connection_kwargs)
-        if c.closed():
-            self.reset()
-            return self.get_connection()
-        self._in_use_connections.add(c)
-        return c
+            try:
+                c = self._available_connections.pop()
+                log.debug('Get connection from pool %s' % (c,))
+            except IndexError:
+                c = self.connection_class(pool=self, **self.connection_kwargs)
+            self._in_use_connections.add(c)
+            return c
+        except Exception as e:
+            if self.q:
+                self.q.put_nowait(1)
+            raise e
 
     def release(self, connection):
         """
@@ -86,15 +90,11 @@ class ConnectionPool(object):
         :param connection:
         :return:
         """
+        if connection in self._in_use_connections:
+            self._in_use_connections.remove(connection)
+            self._available_connections.append(connection)
         if self.q:
-            try:
-                self.q.put_nowait(1)
-            except Full:
-                pass
-            else:
-                if connection in self._in_use_connections:
-                    self._in_use_connections.remove(connection)
-                    self._available_connections.append(connection)
+            self.q.put_nowait(1)
 
 
     def disconnect(self):
